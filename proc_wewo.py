@@ -227,7 +227,7 @@ def get_exclude_freq_mask(shape, center, x_region, y_region):
     return ~(large_mask & small_mask)
 
 
-def preprocess_wewo(img_path, k_freq_to_eliminate):
+def preprocess_wewo(img_path, k_freq_to_eliminate, is_only_in_pipeline=True):
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 
     dft_img = np.fft.fft2(img)
@@ -242,13 +242,15 @@ def preprocess_wewo(img_path, k_freq_to_eliminate):
         dft_img, mask, gaussian=False, keep_dc=True, plot=False, return_dft=True
     )
 
-    x = np.abs(img)
+    if is_only_in_pipeline:
 
-    x = cv2.normalize(x, None, 0, 255, cv2.NORM_MINMAX)
+        x = np.abs(img)
 
-    final_processed_image = cv2.threshold(x, 127, 255, cv2.THRESH_BINARY)[1]
+        x = cv2.normalize(x, None, 0, 255, cv2.NORM_MINMAX)
 
-    return final_processed_image
+        return cv2.threshold(x, 127, 255, cv2.THRESH_BINARY)[1]
+    
+    return img
 
 
 def main():
