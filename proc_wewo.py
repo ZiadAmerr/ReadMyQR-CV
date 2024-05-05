@@ -243,13 +243,12 @@ def preprocess_wewo(img_path, k_freq_to_eliminate, is_only_in_pipeline=True):
     )
 
     if is_only_in_pipeline:
-
         x = np.abs(img)
 
         x = cv2.normalize(x, None, 0, 255, cv2.NORM_MINMAX)
 
         return cv2.threshold(x, 127, 255, cv2.THRESH_BINARY)[1]
-    
+
     return img
 
 
@@ -258,7 +257,6 @@ def main():
     x = preprocess_wewo(path, 21)
     plt.imshow(x, cmap="gray")
     plt.savefig("output_wewo.png")
-    
 
 
 if __name__ == "__main__":
