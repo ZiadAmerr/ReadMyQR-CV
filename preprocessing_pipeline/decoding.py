@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple
 import pickle
 import argparse
+import reedsolo as rs
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -108,7 +109,10 @@ def main():
 
     images = pickle.load(open(
         "/Users/ziad/Desktop/Projects/CV/preprocessing_pipeline/read_images.pkl", "rb"))
-    image = images[n_tc][1]
+    image_name, image = images[n_tc]
+
+    if debug:
+        print(f"Image name: {image_name}")
 
     meta = get_qr_metadata(image, inverted=False)
 
@@ -145,7 +149,7 @@ def main():
         alpha_char = chr(int(bit_str, 2))
         chars.append(alpha_char)
         if debug:
-            print(f"{bit_str} -> {chr(int(bit_str, 2))}")
+            print(f'{bit_str} (={int(bit_str, 2):03d}) = {alpha_char}')
         idx += 1
     
     # read the end block
@@ -156,18 +160,47 @@ def main():
 
     # read the rest of the blocks
     for _ in range(len(QR_READ_STEPS) - len_ - 1):
-        start_i, start_j, direction = QR_READ_STEPS[len_]
+        start_i, start_j, direction = QR_READ_STEPS[idx]
         bits = apply_mask_general(start_i, start_j, image, direction, inverted=False)
         bit_str = "".join([str(bit) for bit in bits])
+        alpha_char = chr(int(bit_str, 2))
         if debug:
-            print(f"{bit_str} -> {chr(int(bit_str, 2))}")
+            print(f'{bit_str} (={int(bit_str, 2):03d}) = {alpha_char}')
+
         msg_bits.extend(bits)
         idx += 1
     
     if debug:
         print("Msg bits", msg_bits)
     
-    print("".join(chars))
+    # print("".join(chars))
+
+    message_bytes = [int("".join(map(str, msg_bits[i:i+8])), 2)
+                     for i in range(0, len(msg_bits), 8)]
+    
+    if debug:
+        print("Message bytes", message_bytes)
+    
+    # Create the Reed-Solomon Codec for 7 ECC symbols (again, this is L)
+    rsc = rs.RSCodec(nsym=7)
+
+    # Decode the bytes with the 7-ECC RS Codec
+    # find n errors
+    try:
+        message_decoded = rsc.decode(message_bytes)
+        rsc.maxerrata(verbose=False)
+
+        # In order to extract the actual data, need to convert back to bits
+        # Then take as many bytes as indicated by the message length indicator
+        # That is AFTER removing the first 12 bytes (of enc and len)
+        data_bits = bin(int.from_bytes(message_decoded[0], byteorder='big'))[
+            13:13+len_*8]
+
+        # Now convert back to bytes and print it lol
+        data_bytes = int(data_bits, 2).to_bytes((len(data_bits)+7)//8, 'big')
+        print(f'Data in message = "{data_bytes.decode(encoding="iso-8859-1")}"')
+    except rs.ReedSolomonError as e:
+        print(e)
 
 
 if __name__ == "__main__":
