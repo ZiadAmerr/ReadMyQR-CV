@@ -50,23 +50,25 @@ def fix_inverted(image, hist_values):
             return image
     else:
         return image
-
+    
+def weighted_mean(dictionary):
+    # Calculate the sum of products
+    sum_products = sum(key * value for key, value in dictionary.items())
+    
+    # Calculate the sum of occurrences
+    sum_occurrences = sum(dictionary.values())
+    
+    # Calculate the weighted mean
+    weighted_mean = sum_products / sum_occurrences
+    
+    return weighted_mean
 
 def fix_low_brightness(image, hist_values):
-    if max(hist_values.keys()) < 64:
+    mean = weighted_mean(hist_values)
+    if mean < 100:
         increased_brightness = cv2.add(image, 128)
         equalized_image = cv2.equalizeHist(increased_brightness)
         _, image_new = cv2.threshold(equalized_image, 92, 255, cv2.THRESH_BINARY)
-        return image_new
-    else:
-        return image
-
-
-def fix_high_brightness(image, hist_values):
-    if min(hist_values.keys()) > 192:
-        subtracted_image = np.clip(image - 128, 0, 255).astype(np.uint8)
-        equalized_image = cv2.equalizeHist(subtracted_image)
-        _, image_new = cv2.threshold(equalized_image, 127, 255, cv2.THRESH_BINARY)
         return image_new
     else:
         return image
@@ -220,57 +222,6 @@ def fix_tilt(image):
         return image  # Return original image
 
 
-# fixes skew on one locator box only??
-def fix_locator_box_skew(image):
-    # Apply edge detection to find contours
-    edges = cv2.Canny(image, 50, 150, apertureSize=5)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Find the largest contour (assumed to be the QR code)
-    max_contour = max(contours, key=cv2.contourArea)
-
-    # Approximate the polygonal curve of the contour
-    epsilon = 0.02 * cv2.arcLength(max_contour, True)
-    approx = cv2.approxPolyDP(max_contour, epsilon, True)
-
-    # Check if the contour is a quadrilateral (4 vertices)
-    if len(approx) == 4:
-        # Reshape the vertices of the quadrilateral
-        rect = np.zeros((4, 2), dtype=np.float32)
-        for i in range(4):
-            rect[i] = approx[i][0]
-
-        # Calculate angles of the lines forming the sides of the locator box
-        angles = []
-        for i in range(4):
-            p1 = rect[i]
-            p2 = rect[(i + 1) % 4]
-            p3 = rect[(i + 2) % 4]
-            v1 = p1 - p2
-            v2 = p3 - p2
-            angle = np.degrees(
-                np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-            )
-            angles.append(angle)
-
-        # Check if any angle deviates significantly from 90 degrees
-        if any(abs(angle - 90) > 10 for angle in angles):
-            # Compute the target square shape
-            target_shape = np.array(
-                [[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32
-            )
-
-            # Compute the perspective transformation matrix
-            matrix = cv2.getPerspectiveTransform(rect, target_shape)
-
-            # Apply the perspective transformation to correct skew
-            corrected_image = cv2.warpPerspective(image, matrix, (1012, 1012))
-            return corrected_image
-
-    # Return the original image if no skew is detected or contour is not a quadrilateral
-    return image
-
-
 def rotate_image(image):
     # dilate to isolate black squares
     custom_kernel_size = 105
@@ -315,6 +266,25 @@ def rotate_image(image):
 
     return rotated_image
 
+def detect_salt_and_pepper(img, filter_size=41, threshold=1000):
+
+    # Calculate variance of the original image
+    variance_original = np.var(img)
+
+    # Apply median filtering to smooth the image
+    median_img = cv2.medianBlur(img, filter_size)
+
+    # Calculate variance of the filtered image
+    variance_filtered = np.var(median_img)
+
+    # Calculate the absolute difference in variance
+    diff_variance = np.abs(variance_original - variance_filtered)
+
+    # Determine if the image likely contains salt and pepper noise based on the difference in variance
+    if diff_variance > threshold:
+        return True
+    else:
+        return False
 
 def repair_image(image):
     # Specify the desired size for the new image
@@ -372,6 +342,93 @@ def replace_with_median(image, size):
 
     return result
 
+def find_qr_corners(gray_image):
+    # Apply edge detection
+    edges = cv2.Canny(gray_image, 50, 120, apertureSize=3)
+
+    # Detect lines
+    lines = cv2.HoughLinesP(
+        edges, 1, np.pi / 180, threshold=40, minLineLength=85, maxLineGap=180
+    )
+
+    # Draw lines only on a blank image
+    img_with_lines_only = np.zeros_like(gray_image)
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(
+                img_with_lines_only, (x1, y1), (x2, y2), (255, 255, 255), 2
+            )  # White lines
+    # Find contours
+    contours, _ = cv2.findContours(
+        img_with_lines_only, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    # Iterate through each contour
+    corners = []
+    for contour in contours:
+        # Approximate the contour to a polygon with less vertices
+        epsilon = 0.1 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        # If the approximated polygon has 4 vertices (i.e., it's a rectangle)
+        if len(approx) == 4:
+            # Extract the coordinates of the four corners
+            corners.extend([tuple(point[0]) for point in approx])
+    return corners
+
+def fix_locator_box_skew(image):
+
+    # Get qr corners
+    corners = find_qr_corners(image)
+    if not corners:
+        return image
+    print(f"corners are: {corners}")
+    # Apply edge detection to find contours
+    edges = cv2.Canny(image, 40, 150, apertureSize=3)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Find the largest contour (assumed to be the QR code)
+    max_contour = max(contours, key=cv2.contourArea)
+
+    # Approximate the polygonal curve of the contour
+    epsilon = 0.02 * cv2.arcLength(max_contour, True)
+    approx = cv2.approxPolyDP(max_contour, epsilon, True)
+
+    # Check if the contour is a quadrilateral (4 vertices)
+    if len(approx) == 4:
+        # Reshape the vertices of the quadrilateral
+        rect = np.zeros((4, 2), dtype=np.float32)
+        for i in range(4):
+            rect[i] = approx[i][0]
+        # print(rect)
+
+        # Calculate angles of the lines forming the sides of the locator box
+        angles = []
+        for i in range(4):
+            p1 = rect[i]
+            p2 = rect[(i + 1) % 4]
+            p3 = rect[(i + 2) % 4]
+            v1 = p1 - p2
+            v2 = p3 - p2
+            angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+            angles.append(angle)
+
+        # Check if any angle deviates significantly from 90 degrees
+        if any(abs(angle - 90) > 10 for angle in angles):
+            # Compute the target square shape
+            target_shape = np.array([[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32)
+
+            # replace the array here with a function that returns a 2D numpy array of largest contour
+            new_rect = np.array([corners[1], corners[0], corners[3], corners[2]], dtype=np.float32)
+
+            # Compute the perspective transformation matrix
+            matrix = cv2.getPerspectiveTransform(new_rect, target_shape)
+
+            # Apply the perspective transformation to correct skew
+            corrected_image = cv2.warpPerspective(image, matrix, (1012, 1012))
+            return corrected_image
+
+    # Return the original image if no skew is detected or contour is not a quadrilateral
+    return image
 
 def perform_pipeline(folder_path, log=True, plot=True):
     global LOG
@@ -417,23 +474,19 @@ def perform_pipeline(folder_path, log=True, plot=True):
         # Low Brightness fix (can be more generic by removing small noise using median filter)
         image_new = fix_low_brightness(image_new, hist_values)
 
-        # High Brightness fix (can be more generic by removing small noise using median filter)
-        image_new = fix_high_brightness(image_new, hist_values)
-
-        # High Brightness fix (can be more generic by removing small noise using median filter)
-        image_new = fix_high_brightness(image_new, hist_values)
 
         # After all above preprocessing, if an image still doesn't have any black or white pixel values, it is most probably a low contrast image
         # Preprocessing with average of key values as threshold to fix low contrast images
         hist_values = unique_pixel_values(image_new)
         image_new = fix_low_contrast(image_new, hist_values)
 
-        # After all previous preprocessing all QR codes quiet zones should be pure white pixels only
-        # If the first 5x5 window in image still contains more than 1 pixel value, then it must contain salt & pepper noise
+        # salt and pepper detection
+        if detect_salt_and_pepper(image_new):
+            image_new = fix_salt_pepper(image)
+        
         small_corner = unique_pixel_values(image_new[0:5][0:5])
         if len(small_corner) > 1:
             image_new = fix_salt_pepper(image)
-
         # DANGER ZONE
         ################################################################
 
@@ -464,7 +517,7 @@ def perform_pipeline(folder_path, log=True, plot=True):
             image_new = crop_to_bounding_box(image_new, expanded_box)
 
         # FIX 6 HERE
-        # image_new = fix_locator_box_skew(image_new)
+        image_new = fix_locator_box_skew(image_new)
 
         # rotate images that has clear 3 locator boxes (to be moved down)
         image_new = rotate_image(image_new)
@@ -508,3 +561,4 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
 
 LOG = True
+# perform_pipeline("test_cases")
