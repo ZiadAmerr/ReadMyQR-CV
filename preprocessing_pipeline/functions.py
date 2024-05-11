@@ -73,9 +73,23 @@ def fix_low_brightness(image, hist_values):
     else:
         return image
 
+def is_low_contrast(hist_values):
+    # Convert pixel counts dictionary to array
+    counts_array = np.array(list(hist_values.values()))
+
+    # Calculate contrast ratio
+    min_count = np.min(counts_array)
+    max_count = np.max(counts_array)
+    contrast_ratio = (max_count - min_count) / max_count
+    print(contrast_ratio)
+    # Check if image is low contrast
+    if contrast_ratio > 0.9:
+        return True  # Image appears to be low contrast
+    else:
+        return False  # Image has sufficient contrast
 
 def fix_low_contrast(image, hist_values):
-    if 0 not in hist_values and 255 not in hist_values:
+    if is_low_contrast(hist_values):
         sum_of_keys = sum(key for key in hist_values)
         keys_average = sum_of_keys / len(hist_values)
         equalized_image = cv2.equalizeHist(np.uint8(image))
@@ -363,12 +377,14 @@ def find_qr_corners(gray_image):
     contours, _ = cv2.findContours(
         img_with_lines_only, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
+
     # Iterate through each contour
     corners = []
     for contour in contours:
         # Approximate the contour to a polygon with less vertices
-        epsilon = 0.1 * cv2.arcLength(contour, True)
+        epsilon = 0.05 * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
+
         # If the approximated polygon has 4 vertices (i.e., it's a rectangle)
         if len(approx) == 4:
             # Extract the coordinates of the four corners
@@ -381,7 +397,7 @@ def fix_locator_box_skew(image):
     corners = find_qr_corners(image)
     if not corners:
         return image
-    print(f"corners are: {corners}")
+
     # Apply edge detection to find contours
     edges = cv2.Canny(image, 40, 150, apertureSize=3)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -393,39 +409,37 @@ def fix_locator_box_skew(image):
     epsilon = 0.02 * cv2.arcLength(max_contour, True)
     approx = cv2.approxPolyDP(max_contour, epsilon, True)
 
-    # Check if the contour is a quadrilateral (4 vertices)
-    if len(approx) == 4:
-        # Reshape the vertices of the quadrilateral
-        rect = np.zeros((4, 2), dtype=np.float32)
-        for i in range(4):
-            rect[i] = approx[i][0]
-        # print(rect)
+    # Reshape the vertices of the quadrilateral
+    rect = np.zeros((4, 2), dtype=np.float32)
+    for i in range(4):
+        rect[i] = approx[i][0]
+    # print(rect)
 
-        # Calculate angles of the lines forming the sides of the locator box
-        angles = []
-        for i in range(4):
-            p1 = rect[i]
-            p2 = rect[(i + 1) % 4]
-            p3 = rect[(i + 2) % 4]
-            v1 = p1 - p2
-            v2 = p3 - p2
-            angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
-            angles.append(angle)
+    # Calculate angles of the lines forming the sides of the locator box
+    angles = []
+    for i in range(4):
+        p1 = rect[i]
+        p2 = rect[(i + 1) % 4]
+        p3 = rect[(i + 2) % 4]
+        v1 = p1 - p2
+        v2 = p3 - p2
+        angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+        angles.append(angle)
 
-        # Check if any angle deviates significantly from 90 degrees
-        if any(abs(angle - 90) > 10 for angle in angles):
-            # Compute the target square shape
-            target_shape = np.array([[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32)
+    # Check if any angle deviates significantly from 90 degrees
+    if any(abs(angle - 90) > 10 for angle in angles):
+        # Compute the target square shape
+        target_shape = np.array([[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32)
 
-            # replace the array here with a function that returns a 2D numpy array of largest contour
-            new_rect = np.array([corners[1], corners[0], corners[3], corners[2]], dtype=np.float32)
+        # replace the array here with a function that returns a 2D numpy array of largest contour
+        new_rect = np.array([corners[1], corners[0], corners[3], corners[2]], dtype=np.float32)
 
-            # Compute the perspective transformation matrix
-            matrix = cv2.getPerspectiveTransform(new_rect, target_shape)
+        # Compute the perspective transformation matrix
+        matrix = cv2.getPerspectiveTransform(new_rect, target_shape)
 
-            # Apply the perspective transformation to correct skew
-            corrected_image = cv2.warpPerspective(image, matrix, (1012, 1012))
-            return corrected_image
+        # Apply the perspective transformation to correct skew
+        corrected_image = cv2.warpPerspective(image, matrix, (1012, 1012))
+        return corrected_image
 
     # Return the original image if no skew is detected or contour is not a quadrilateral
     return image
@@ -561,4 +575,4 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
 
 LOG = True
-# perform_pipeline("test_cases")
+perform_pipeline("test_cases")
