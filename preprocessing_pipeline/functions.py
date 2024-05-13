@@ -43,9 +43,7 @@ def fix_sin_wave(image):
 def fix_inverted(image, hist_values):
     if 0 in hist_values and 255 in hist_values:
         if hist_values[0] > hist_values[255]:
-            image_new = 255 - image
-            _, image_new = cv2.threshold(image_new, 192, 255, cv2.THRESH_BINARY)
-            return image_new
+            return cv2.bitwise_not(image)
         else:
             return image
     else:
@@ -74,16 +72,16 @@ def fix_low_brightness(image, hist_values):
         return image
 
 def is_low_contrast(hist_values):
-    # Convert pixel counts dictionary to array
-    counts_array = np.array(list(hist_values.values()))
-
+    # Convert pixel values dictionary to array
+    counts_array = np.array(list(hist_values.keys()))
+    
     # Calculate contrast ratio
     min_count = np.min(counts_array)
     max_count = np.max(counts_array)
     contrast_ratio = (max_count - min_count) / max_count
-    print(contrast_ratio)
+
     # Check if image is low contrast
-    if contrast_ratio > 0.9:
+    if contrast_ratio < 0.1:
         return True  # Image appears to be low contrast
     else:
         return False  # Image has sufficient contrast
@@ -575,4 +573,4 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
 
 LOG = True
-perform_pipeline("test_cases")
+# perform_pipeline("test_cases")
