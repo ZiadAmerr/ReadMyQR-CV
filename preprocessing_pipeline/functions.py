@@ -40,14 +40,60 @@ def fix_sin_wave(image):
     return img_back_modified
 
 
+# def fix_inverted(image, hist_values):
+#     if 0 in hist_values and 255 in hist_values:
+#         if hist_values[0] > hist_values[255]:
+#             return cv2.bitwise_not(image)
+#         else:
+#             return image
+#     else:
+#         return image
+# def fix_inverted(image, hist_values):
+#     if 0 in hist_values and 255 in hist_values:
+#         if hist_values[0] > hist_values[255]:
+#             return cv2.bitwise_not(image)
+#         else:
+#             return image
+#     else:
+#         return image
 def fix_inverted(image, hist_values):
-    if 0 in hist_values and 255 in hist_values:
-        if hist_values[0] > hist_values[255]:
-            return cv2.bitwise_not(image)
-        else:
-            return image
+    result = detect_inversion(image)
+    print(result)
+    if result == 'inverted':
+        return cv2.bitwise_not(image)
     else:
         return image
+def calculate_average(pixels, y_tuple, x_tuple):
+    count = 0
+    sum = 0
+    for i in range(y_tuple[0], min(y_tuple[1], pixels.shape[0])):
+        for j in range(x_tuple[0], min(x_tuple[1], pixels.shape[1])):
+            sum += pixels[i][j]
+            count += 1
+    print(count)
+    if count == 0:
+        return 0
+    else:
+        return sum / count
+
+def detect_inversion(image):
+    X_TOP_LEFT = (1, (7 * 48) - 1)
+    Y_TOP_LEFT = ((7 * 48) + 2, (8 * 48) - 2)
+
+    # Convert the image into a NumPy array
+    pixels = np.array(image)
+
+    # Calculate the average intensity of the 8th row from above in cells
+    average = calculate_average(pixels, Y_TOP_LEFT, X_TOP_LEFT)
+    print(average)
+
+    # Determine inversion based on average intensity
+    if int(average) > 230:
+        return "NI"  # NI = Not Inverted
+    elif int(average) < 30:
+        return f"inverted"  # I = Inverted
+    else:
+        return "N/A"
     
 def weighted_mean(dictionary):
     # Calculate the sum of products
@@ -476,8 +522,8 @@ def perform_pipeline(folder_path, log=True, plot=True):
         # So, if black pixels are more than white pixels, invert image
         hist_values = unique_pixel_values(image_new)
 
-        # Needs rework (Broken)
-        image_new = fix_inverted(image_new, hist_values)
+        # # Needs rework (Broken)
+        # image_new = fix_inverted(image_new, hist_values)
 
         # Checking for extreme low/high brightess
 
@@ -531,6 +577,10 @@ def perform_pipeline(folder_path, log=True, plot=True):
         # FIX 6 HERE
         image_new = fix_locator_box_skew(image_new)
 
+        image_new = cv2.resize(image_new, (1008, 1008))
+
+        # Needs rework (Broken)
+        image_new = fix_inverted(image_new, hist_values)
         # rotate images that has clear 3 locator boxes (to be moved down)
         image_new = rotate_image(image_new)
 
@@ -552,7 +602,10 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
         # Apply Final thresholding to remove any noise pixels
         _, image_new = cv2.threshold(image_new, 64, 255, cv2.THRESH_BINARY)
+        # image_new = cv2.resize(image_new, (1008, 1008))
 
+        # # Needs rework (Broken)
+        # image_new = fix_inverted(image_new, hist_values)
         # Plot the image in the corresponding subplot
         if plot:
             row = i // 6
@@ -573,4 +626,4 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
 
 LOG = True
-# perform_pipeline("test_cases")
+perform_pipeline("test_cases")
