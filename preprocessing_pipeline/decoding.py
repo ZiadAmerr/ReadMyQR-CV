@@ -2,8 +2,10 @@ from typing import Dict, List, Tuple
 import pickle
 import argparse
 import reedsolo as rs
-
+import re
 import matplotlib.pyplot as plt
+
+# import matplotlib.pyplot as plt
 import numpy as np
 from consts import MASKS, DIRECTION_OFFSETS, UP4, DOWN4, UP8, DOWN8, CW8, CCW8, QR_READ_STEPS, N_DIM
 
@@ -111,6 +113,11 @@ def main():
         "/Users/ziad/Desktop/Projects/CV/preprocessing_pipeline/read_images.pkl", "rb"))
     image_name, image = images[n_tc]
 
+    plt.imshow(image, cmap="gray")
+    # plt.show()
+    plt.savefig(f"image_{n_tc}.png")
+    plt.close()
+
     if debug:
         print(f"Image name: {image_name}")
 
@@ -141,7 +148,7 @@ def main():
     idx = 0
 
     # read the first len_ blocks
-    for _ in range(min(len_, 17)):
+    for _ in range(min(len_, 18)):
         start_i, start_j, direction = QR_READ_STEPS[idx]
         bits = apply_mask_general(start_i, start_j, image, direction, inverted=False)
         msg_bits.extend(bits)
@@ -200,7 +207,14 @@ def main():
         data_bytes = int(data_bits, 2).to_bytes((len(data_bits)+7)//8, 'big')
         print(f'Data in message = "{data_bytes.decode(encoding="iso-8859-1")}"')
     except rs.ReedSolomonError as e:
-        print(e)
+        msg_str = "".join(chars)
+
+        msg_removed_illegal_chars = re.sub(r'[^\x00-\x7F]', '', msg_str)
+
+        msg_raw_new_lines_removed = re.sub(r'[\r\n]', '', msg_removed_illegal_chars)
+
+        print(
+            f"Error decoding message: {e}, message = {msg_raw_new_lines_removed}")
 
 
 if __name__ == "__main__":
