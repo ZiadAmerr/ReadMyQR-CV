@@ -16,16 +16,16 @@ DIRECTION_OFFSETS = {
         "col_offsets": [0, -1, 0, -1, 0, -1, 0, -1]
     },
     UP4: {
-        "row_offsets": [0, 0, -1, -1, -2, -2, -3, -3],
-        "col_offsets": [0, -1, 0, -1, 0, -1, 0, -1]
+        "row_offsets": [0, 0, -1, -1],
+        "col_offsets": [0, -1, 0, -1]
     },
     DOWN8: {
         "row_offsets": [0, 0, 1, 1, 2, 2, 3, 3],
         "col_offsets": [0, -1, 0, -1, 0, -1, 0, -1]
     },
     DOWN4: {
-        "row_offsets": [0, 0, 1, 1, 2, 2, 3, 3],
-        "col_offsets": [0, -1, 0, -1, 0, -1, 0, -1]
+        "row_offsets": [0, 0, 1, 1],
+        "col_offsets": [0, -1, 0, -1]
     },
     CW8: {
         "row_offsets": [0, 0, 1, 1, 1, 1, 0, 0],

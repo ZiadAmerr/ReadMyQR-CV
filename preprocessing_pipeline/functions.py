@@ -626,4 +626,4 @@ def perform_pipeline(folder_path, log=True, plot=True):
 
 
 LOG = True
-perform_pipeline("test_cases")
+perform_pipeline("test_cases", plot=True, log=False)
