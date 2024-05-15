@@ -59,10 +59,12 @@ def fix_sin_wave(image):
 def fix_inverted(image, hist_values):
     result = detect_inversion(image)
     print(result)
-    if result == 'inverted':
+    if result == "inverted":
         return cv2.bitwise_not(image)
     else:
         return image
+
+
 def calculate_average(pixels, y_tuple, x_tuple):
     count = 0
     sum = 0
@@ -75,6 +77,7 @@ def calculate_average(pixels, y_tuple, x_tuple):
         return 0
     else:
         return sum / count
+
 
 def detect_inversion(image):
     X_TOP_LEFT = (1, (7 * 48) - 1)
@@ -94,18 +97,20 @@ def detect_inversion(image):
         return f"inverted"  # I = Inverted
     else:
         return "N/A"
-    
+
+
 def weighted_mean(dictionary):
     # Calculate the sum of products
     sum_products = sum(key * value for key, value in dictionary.items())
-    
+
     # Calculate the sum of occurrences
     sum_occurrences = sum(dictionary.values())
-    
+
     # Calculate the weighted mean
     weighted_mean = sum_products / sum_occurrences
-    
+
     return weighted_mean
+
 
 def fix_low_brightness(image, hist_values):
     mean = weighted_mean(hist_values)
@@ -117,10 +122,11 @@ def fix_low_brightness(image, hist_values):
     else:
         return image
 
+
 def is_low_contrast(hist_values):
     # Convert pixel values dictionary to array
     counts_array = np.array(list(hist_values.keys()))
-    
+
     # Calculate contrast ratio
     min_count = np.min(counts_array)
     max_count = np.max(counts_array)
@@ -131,6 +137,7 @@ def is_low_contrast(hist_values):
         return True  # Image appears to be low contrast
     else:
         return False  # Image has sufficient contrast
+
 
 def fix_low_contrast(image, hist_values):
     if is_low_contrast(hist_values):
@@ -324,8 +331,8 @@ def rotate_image(image):
 
     return rotated_image
 
-def detect_salt_and_pepper(img, filter_size=41, threshold=1000):
 
+def detect_salt_and_pepper(img, filter_size=41, threshold=1000):
     # Calculate variance of the original image
     variance_original = np.var(img)
 
@@ -343,6 +350,7 @@ def detect_salt_and_pepper(img, filter_size=41, threshold=1000):
         return True
     else:
         return False
+
 
 def repair_image(image):
     # Specify the desired size for the new image
@@ -400,6 +408,7 @@ def replace_with_median(image, size):
 
     return result
 
+
 def find_qr_corners(gray_image):
     # Apply edge detection
     edges = cv2.Canny(gray_image, 50, 120, apertureSize=3)
@@ -435,8 +444,8 @@ def find_qr_corners(gray_image):
             corners.extend([tuple(point[0]) for point in approx])
     return corners
 
-def fix_locator_box_skew(image):
 
+def fix_locator_box_skew(image):
     # Get qr corners
     corners = find_qr_corners(image)
     if not corners:
@@ -467,16 +476,22 @@ def fix_locator_box_skew(image):
         p3 = rect[(i + 2) % 4]
         v1 = p1 - p2
         v2 = p3 - p2
-        angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+        angle = np.degrees(
+            np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+        )
         angles.append(angle)
 
     # Check if any angle deviates significantly from 90 degrees
     if any(abs(angle - 90) > 10 for angle in angles):
         # Compute the target square shape
-        target_shape = np.array([[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32)
+        target_shape = np.array(
+            [[0, 0], [1012, 0], [1012, 1012], [0, 1012]], dtype=np.float32
+        )
 
         # replace the array here with a function that returns a 2D numpy array of largest contour
-        new_rect = np.array([corners[1], corners[0], corners[3], corners[2]], dtype=np.float32)
+        new_rect = np.array(
+            [corners[1], corners[0], corners[3], corners[2]], dtype=np.float32
+        )
 
         # Compute the perspective transformation matrix
         matrix = cv2.getPerspectiveTransform(new_rect, target_shape)
@@ -487,6 +502,7 @@ def fix_locator_box_skew(image):
 
     # Return the original image if no skew is detected or contour is not a quadrilateral
     return image
+
 
 def perform_pipeline(folder_path, log=True, plot=True):
     global LOG
@@ -532,7 +548,6 @@ def perform_pipeline(folder_path, log=True, plot=True):
         # Low Brightness fix (can be more generic by removing small noise using median filter)
         image_new = fix_low_brightness(image_new, hist_values)
 
-
         # After all above preprocessing, if an image still doesn't have any black or white pixel values, it is most probably a low contrast image
         # Preprocessing with average of key values as threshold to fix low contrast images
         hist_values = unique_pixel_values(image_new)
@@ -541,7 +556,7 @@ def perform_pipeline(folder_path, log=True, plot=True):
         # salt and pepper detection
         if detect_salt_and_pepper(image_new):
             image_new = fix_salt_pepper(image)
-        
+
         small_corner = unique_pixel_values(image_new[0:5][0:5])
         if len(small_corner) > 1:
             image_new = fix_salt_pepper(image)
